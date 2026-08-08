@@ -17,8 +17,14 @@
 #include <torch/extension.h>
 
 #include "decode/decode_handler.cuh"
+
+#if !defined(USE_HIP)
+// The prefill kernels are built on mma.sync and ldmatrix, which have no HIP spelling and
+// need an AMD-native rewrite; top-k page filtering calls RAFT's radix select, which builds
+// for CUDA only. Both are left out of the ROCm build.
 #include "prefill/prefill.cuh"
 #include "topk/decode_select_k.cuh"
+#endif
 
 void apply_rope_in_place(torch::Tensor q,
 						 torch::Tensor k,
@@ -31,12 +37,14 @@ void rms_norm_forward(torch::Tensor input,
 					  torch::Tensor output,
 					  float epsilon);
 
+#if !defined(USE_HIP)
 void topk_filtering(torch::Tensor estimated_value,
 					torch::Tensor estimated_indices,
 					torch::Tensor d_out,
 					torch::Tensor indices_out,
 					torch::Tensor buf,
 					unsigned int page_budget);
+#endif
 
 void estimate_attn_score(torch::Tensor q,
 						 torch::Tensor o,
@@ -75,6 +83,7 @@ void append_kv_cache_decode(torch::Tensor k,
 							unsigned int metadata_last_page_idx,
 							unsigned int layout);
 
+#if !defined(USE_HIP)
 torch::Tensor prefill_with_paged_kv_cache(torch::Tensor q,
 										  torch::Tensor kv_data,
 										  torch::Tensor kv_indices,
@@ -84,6 +93,7 @@ torch::Tensor prefill_with_paged_kv_cache(torch::Tensor q,
 										  bool allow_fp16_qk_reduction,
 										  float rope_scale,
 										  float rope_theta);
+#endif
 
 class BatchDecodeWithPagedKVCachePyTorchWrapper {
 public:

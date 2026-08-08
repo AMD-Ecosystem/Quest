@@ -54,6 +54,21 @@ make -j
 cd quest/ops
 bash setup.sh
 ```
+
+### Building on AMD GPUs (ROCm)
+
+The operators also build for AMD GPUs against a ROCm build of PyTorch. Configure with `USE_HIP` and name the target architecture; `libraft` is not needed, and step 3 above (the kernel benchmarks) is CUDA-only.
+```
+cd quest/ops
+mkdir -p build && cd build
+cmake -GNinja -DUSE_HIP=ON -DCMAKE_HIP_ARCHITECTURES=gfx1100 \
+  -DCMAKE_PREFIX_PATH=`python -c 'import torch;print(torch.utils.cmake_prefix_path)'` ..
+ninja
+ln -sf $PWD/_kernels*.so ../../
+```
+The target architecture comes from `CMAKE_HIP_ARCHITECTURES` when you pass it, otherwise from the `PYTORCH_ROCM_ARCH` environment variable, otherwise from the GPUs installed in the build machine.
+
+`topk_filtering` (RAFT radix select) and `prefill_with_paged_kv_cache` are not part of the ROCm build; RoPE, paged KV-cache append, the page-metadata estimate score, RMSNorm and the batch decode attention all are. Both of the missing operators are reached from `quest/models/QuestAttention.py`, so the model wrappers and everything built on them do not run on ROCm yet: that is the accuracy evaluation described immediately below, the end-to-end efficiency scripts and the examples. The kernel tests under `quest/tests` cover the operators that do build.
 ## Accuracy Evaluation
 Our evaluations are based on [LongChat-7B-v1.5-32K](https://huggingface.co/lmsys/longchat-7b-v1.5-32k?clone=true) and [Yarn-Llama2-7B-128K](https://huggingface.co/NousResearch/Yarn-Llama-2-7b-128k) models, which are capable of handling long-context text generations. We evaluate both passkey retrieval and LongBench benchmarks. We provide several scripts to reproduce our results in the paper:
 

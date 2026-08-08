@@ -42,13 +42,23 @@
 #include "bsk_ops.h"
 #include "pytorch_extension_utils.h"
 
+// HIP's warp-sync builtins take a 64-bit participation mask, wide enough to name every
+// lane of a 64-wide wavefront. The explicit width of 32 on the shuffle keeps the butterfly
+// inside a 32-lane group whatever the wavefront size, so the lane and warp indexing in
+// blockReduceSum below stays correct on AMD as well as on NVIDIA.
+#if defined(USE_HIP)
+#define QUEST_FULL_WARP_MASK 0xffffffffffffffffULL
+#else
+#define QUEST_FULL_WARP_MASK 0xffffffffU
+#endif
+
 template <typename T, int NUM>
 __inline__ __device__ T warpReduceSum(T *val) {
 #pragma unroll
   for (int i = 0; i < NUM; i++) {
 #pragma unroll
     for (int mask = 16; mask > 0; mask >>= 1)
-      val[i] += __shfl_xor_sync(0xffffffff, val[i], mask, 32);
+      val[i] += __shfl_xor_sync(QUEST_FULL_WARP_MASK, val[i], mask, 32);
   }
   return (T)(0.0f);
 }

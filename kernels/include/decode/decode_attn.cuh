@@ -856,7 +856,16 @@ BatchDecodeWithPagedKVCacheWorkEstimation(uint32_t& tmp_size,
 				FLASHINFER_CUDA_CALL(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
 					&num_blocks_per_sm, partition_kv_kernel, num_threads, smem_size));
 				max_grid_size = num_blocks_per_sm * num_sm;
-				if(batch_size * num_kv_heads >= max_grid_size) {
+				// The single-block path below is only reachable when the grid is already
+				// saturated, which needs num_kv_heads >= blocks_per_cu * cu_count. It then
+				// runs with gridDim.x == 1, where `batch_idx == gridDim.x - 1` is always
+				// true and the chunk length collapses to the cache's trailing page length
+				// instead of spanning the pages this block owns. Always take the split
+				// path: on a large GPU the condition below is false anyway, so nothing
+				// changes there, and on a small one it is the difference between correct
+				// and silently truncated attention.
+				constexpr bool kSingleBlockPathIsCorrect = false;
+				if(kSingleBlockPathIsCorrect && batch_size * num_kv_heads >= max_grid_size) {
 					// do not use partition-kv kernel
 					tmp_size = 0;
 					new_batch_size = batch_size;

@@ -462,11 +462,16 @@ BatchDecodeWithPagedKVCacheKernel(DTypeIn* __restrict__ q,
 	// The last_page_len should be [batch_idx, num_kv_heads]
 	// However, currently target on bsz = 1, so we use [num_kv_heads] only.
 	// Besides, we manually append the last page. Therefore we use [1] only.
-	// We filter other cases directly into PAGE_SIZE and only select batch_idx == gridDim.x - 1.
-	// This is correct since all batches are transformed from the single batch.
 	// TODO: support bsz > 1.
+	//
+	// Only the range that ends at the global end holds the appended trailing page, and
+	// only it is short. Testing the range end rather than `batch_idx == gridDim.x - 1`
+	// says that directly: it picks the same chunk when the range is partitioned, and it
+	// stays right when one block covers the whole range, where the block test is
+	// unconditionally true and collapses every slice to the trailing page length.
+	const IdType last_indptr = paged_kv.indptr[paged_kv.batch_size];
 	const uint32_t cur_last_page_len =
-		(batch_idx == gridDim.x - 1) ? paged_kv.last_page_len : paged_kv.page_size;
+		(cur_page_indptr_end == last_indptr) ? paged_kv.last_page_len : paged_kv.page_size;
 	const uint32_t kv_chunk_len =
 		cur_page_indptr_begin != cur_page_indptr_end
 			? (cur_page_indptr_end - cur_page_indptr_begin - 1) * paged_kv.page_size +
@@ -504,8 +509,6 @@ BatchDecodeWithPagedKVCacheKernel(DTypeIn* __restrict__ q,
 	// preload k/v tiles
 	uint32_t stage_idx = 0;
 	constexpr uint32_t vec_bits = sizeof(DTypeIn) * vec_size * 8;
-	const IdType last_indptr = paged_kv.indptr[paged_kv.batch_size];
-
 	static_assert(num_stages_smem <= bdx);
 #pragma unroll
 	for(uint32_t j = 0; j < tile_size_per_bdx; ++j) {
@@ -856,16 +859,7 @@ BatchDecodeWithPagedKVCacheWorkEstimation(uint32_t& tmp_size,
 				FLASHINFER_CUDA_CALL(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
 					&num_blocks_per_sm, partition_kv_kernel, num_threads, smem_size));
 				max_grid_size = num_blocks_per_sm * num_sm;
-				// The single-block path below is only reachable when the grid is already
-				// saturated, which needs num_kv_heads >= blocks_per_cu * cu_count. It then
-				// runs with gridDim.x == 1, where `batch_idx == gridDim.x - 1` is always
-				// true and the chunk length collapses to the cache's trailing page length
-				// instead of spanning the pages this block owns. Always take the split
-				// path: on a large GPU the condition below is false anyway, so nothing
-				// changes there, and on a small one it is the difference between correct
-				// and silently truncated attention.
-				constexpr bool kSingleBlockPathIsCorrect = false;
-				if(kSingleBlockPathIsCorrect && batch_size * num_kv_heads >= max_grid_size) {
+				if(batch_size * num_kv_heads >= max_grid_size) {
 					// do not use partition-kv kernel
 					tmp_size = 0;
 					new_batch_size = batch_size;

@@ -866,15 +866,27 @@ BatchDecodeWithPagedKVCacheWorkEstimation(uint32_t& tmp_size,
 				// which needs a low multiprocessor count. That leaves whichever shape the
 				// machine does not pick untested there, and the two differ in how the
 				// trailing page is reached. QUEST_DECODE_LAUNCH_SHAPE=single|split selects
-				// one explicitly so both can be covered on any GPU; unset, the occupancy
-				// decision below is unchanged.
-				static const int forced_shape = [] {
-					const char* e = std::getenv("QUEST_DECODE_LAUNCH_SHAPE");
-					if(e == nullptr) return 0;
-					if(std::strcmp(e, "single") == 0) return 1;
-					if(std::strcmp(e, "split") == 0) return -1;
-					return 0;
-				}();
+				// one explicitly so both can be covered on any GPU; unset or empty, the
+				// occupancy decision below is unchanged. Any other value throws, and so
+				// does a shape this call cannot honor: an override that fell back
+				// silently would make a green run indistinguishable from one that never
+				// reached the requested shape. Read on every call rather than cached, so
+				// that setting the variable in-process takes effect; this is host-side
+				// setup, run once per begin_forward.
+				const char* const shape_env = std::getenv("QUEST_DECODE_LAUNCH_SHAPE");
+				int forced_shape = 0;
+				if(shape_env != nullptr && shape_env[0] != '\0') {
+					if(std::strcmp(shape_env, "single") == 0) {
+						forced_shape = 1;
+					} else if(std::strcmp(shape_env, "split") == 0) {
+						forced_shape = -1;
+					} else {
+						std::ostringstream err_msg;
+						err_msg << "QUEST_DECODE_LAUNCH_SHAPE must be \"single\" or \"split\", got \""
+								<< shape_env << "\"";
+						throw std::invalid_argument(err_msg.str());
+					}
+				}
 				const bool use_single_block = forced_shape != 0
 												  ? forced_shape > 0
 												  : batch_size * num_kv_heads >= max_grid_size;
@@ -908,6 +920,15 @@ BatchDecodeWithPagedKVCacheWorkEstimation(uint32_t& tmp_size,
 					} else {
 						tmp_size = num_qo_heads * new_batch_size *
 								   (head_dim * sizeof(DTypeOut) + 2 * sizeof(float));
+					}
+					if(forced_shape < 0 && tmp_size == 0) {
+						std::ostringstream err_msg;
+						err_msg << "QUEST_DECODE_LAUNCH_SHAPE=split cannot be honored: "
+								   "partitioning a batch of "
+								<< batch_size
+								<< " left the batch size unchanged, so this call runs the "
+								   "single-block shape";
+						throw std::invalid_argument(err_msg.str());
 					}
 				}
 			})})});

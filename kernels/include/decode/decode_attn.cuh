@@ -31,6 +31,8 @@
 #include <cuda_runtime.h>
 
 #include <cuda/pipeline>
+#include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <random>
 
@@ -859,7 +861,24 @@ BatchDecodeWithPagedKVCacheWorkEstimation(uint32_t& tmp_size,
 				FLASHINFER_CUDA_CALL(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
 					&num_blocks_per_sm, partition_kv_kernel, num_threads, smem_size));
 				max_grid_size = num_blocks_per_sm * num_sm;
-				if(batch_size * num_kv_heads >= max_grid_size) {
+				// Which of the two launch shapes runs is a property of the GPU: the
+				// single-block shape is only reached once num_kv_heads saturates the grid,
+				// which needs a low multiprocessor count. That leaves whichever shape the
+				// machine does not pick untested there, and the two differ in how the
+				// trailing page is reached. QUEST_DECODE_LAUNCH_SHAPE=single|split selects
+				// one explicitly so both can be covered on any GPU; unset, the occupancy
+				// decision below is unchanged.
+				static const int forced_shape = [] {
+					const char* e = std::getenv("QUEST_DECODE_LAUNCH_SHAPE");
+					if(e == nullptr) return 0;
+					if(std::strcmp(e, "single") == 0) return 1;
+					if(std::strcmp(e, "split") == 0) return -1;
+					return 0;
+				}();
+				const bool use_single_block = forced_shape != 0
+												  ? forced_shape > 0
+												  : batch_size * num_kv_heads >= max_grid_size;
+				if(use_single_block) {
 					// do not use partition-kv kernel
 					tmp_size = 0;
 					new_batch_size = batch_size;

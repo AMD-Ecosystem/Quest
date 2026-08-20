@@ -46,9 +46,14 @@ public:
 	IdType* GetNewIndPtr() const {
 		return (IdType*)int_buffer_; // + batch_size_after_partition_ + 1;
 	}
+	// Both of these live past the new indptr inside int_buffer_, and only the
+	// partitioning branch of BeginForward lays that region out. int_buffer_ alone no
+	// longer distinguishes the two branches, because the un-partitioned branch also
+	// allocates it, for the extended indptr and nothing else. float_buffer_ does: it is
+	// the temporary the partitioned kernel merges through, and only that branch has one.
 	template <typename IdType>
 	IdType* GetChunkIndPtr() const {
-		if(int_buffer_ != nullptr) {
+		if(int_buffer_ != nullptr && float_buffer_ != nullptr) {
 			return ((IdType*)int_buffer_) + batch_size_after_partition_ +
 				   1; // batch_size_before_partition_ + 1
 		} else {
@@ -57,7 +62,7 @@ public:
 	}
 	template <typename IdType>
 	IdType* GetBatchIdxMap() const {
-		if(int_buffer_ != nullptr) {
+		if(int_buffer_ != nullptr && float_buffer_ != nullptr) {
 			return ((IdType*)int_buffer_) + batch_size_after_partition_ +
 				   batch_size_before_partition_ + 2; // batch_size_after_partition_
 		} else {

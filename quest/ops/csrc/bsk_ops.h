@@ -17,12 +17,7 @@
 #include <torch/extension.h>
 
 #include "decode/decode_handler.cuh"
-
-#if !defined(USE_HIP)
-// The prefill kernels are built on mma.sync and ldmatrix, which have no HIP spelling and
-// need an AMD-native rewrite, so they are left out of the ROCm build.
 #include "prefill/prefill.cuh"
-#endif
 #include "topk/decode_select_k.cuh"
 
 void apply_rope_in_place(torch::Tensor q,
@@ -80,7 +75,6 @@ void append_kv_cache_decode(torch::Tensor k,
 							unsigned int metadata_last_page_idx,
 							unsigned int layout);
 
-#if !defined(USE_HIP)
 torch::Tensor prefill_with_paged_kv_cache(torch::Tensor q,
 										  torch::Tensor kv_data,
 										  torch::Tensor kv_indices,
@@ -90,7 +84,6 @@ torch::Tensor prefill_with_paged_kv_cache(torch::Tensor q,
 										  bool allow_fp16_qk_reduction,
 										  float rope_scale,
 										  float rope_theta);
-#endif
 
 class BatchDecodeWithPagedKVCachePyTorchWrapper {
 public:

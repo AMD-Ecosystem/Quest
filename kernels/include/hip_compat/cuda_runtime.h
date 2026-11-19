@@ -20,6 +20,8 @@ using cudaMemcpyKind = hipMemcpyKind;
 #define cudaGetDeviceProperties hipGetDeviceProperties
 #define cudaDeviceGetAttribute hipDeviceGetAttribute
 #define cudaDevAttrMultiProcessorCount hipDeviceAttributeMultiprocessorCount
+#define cudaDevAttrMaxSharedMemoryPerMultiprocessor \
+	hipDeviceAttributeMaxSharedMemoryPerMultiprocessor
 #define cudaPointerGetAttributes hipPointerGetAttributes
 #define cudaMemoryTypeDevice hipMemoryTypeDevice
 #define cudaMalloc hipMalloc

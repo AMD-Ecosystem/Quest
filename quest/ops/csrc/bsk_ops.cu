@@ -8,11 +8,9 @@ PYBIND11_MODULE(_kernels, m) {
 	m.def("estimate_attn_score", &estimate_attn_score, "Estimate Attention Score operator");
 	m.def("append_kv_cache_prefill", &append_kv_cache_prefill, "Append KV-Cache Prefill operator");
 	m.def("append_kv_cache_decode", &append_kv_cache_decode, "Append KV-Cache Decode operator");
-#if !defined(USE_HIP)
 	m.def("prefill_with_paged_kv_cache",
 		  &prefill_with_paged_kv_cache,
 		  "Multi-request batch prefill with paged KV-Cache operator");
-#endif
 	py::class_<BatchDecodeWithPagedKVCachePyTorchWrapper>(
 		m, "BatchDecodeWithPagedKVCachePyTorchWrapper")
 		.def(py::init(&BatchDecodeWithPagedKVCachePyTorchWrapper::Create))

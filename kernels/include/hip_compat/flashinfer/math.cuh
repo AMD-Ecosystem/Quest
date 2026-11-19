@@ -60,5 +60,12 @@ __forceinline__ __device__ half2 shfl_xor_sync(half2 x, int lane_mask) {
 }
 
 }  // namespace math
+
+// HIP provides __hmax2 for bfloat16 pairs only. Same semantics as CUDA's: a NaN in one input
+// yields the other input.
+__forceinline__ __device__ half2 __hmax2(const half2 a, const half2 b) {
+  return half2{__hmax(__low2half(a), __low2half(b)), __hmax(__high2half(a), __high2half(b))};
+}
+
 }  // namespace flashinfer
 #endif  // FLASHINFER_MATH_CUH_

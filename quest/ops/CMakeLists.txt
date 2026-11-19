@@ -71,19 +71,9 @@ find_library(TORCH_PYTHON_LIBRARY torch_python PATH "${TORCH_INSTALL_PREFIX}/lib
 # Check: https://qiita.com/syoyo/items/c3e8e6e5c3e2d69c2325
 add_subdirectory(${CMAKE_SOURCE_DIR}/../../kernels/3rdparty/pybind ${CMAKE_BINARY_DIR}/pybind11)
 
+file(GLOB PYTORCH_SOURCES "csrc/*.cu")
 if(USE_HIP)
-  # The prefill kernels are left out of the ROCm build; see csrc/bsk_ops.h.
-  set(PYTORCH_SOURCES
-    csrc/rms_norm.cu
-    csrc/page.cu
-    csrc/estimate.cu
-    csrc/approx_attn.cu
-    csrc/topk.cu
-    csrc/bsk_ops.cu
-  )
   set_source_files_properties(${PYTORCH_SOURCES} PROPERTIES LANGUAGE HIP)
-else()
-  file(GLOB PYTORCH_SOURCES "csrc/*.cu")
 endif()
 
 pybind11_add_module(_kernels MODULE ${PYTORCH_CPP_SOURCES} ${PYTORCH_SOURCES})
@@ -109,12 +99,13 @@ if(USE_HIP)
   # resolve to the HIP shims in kernels/include/hip_compat.
   set(HIP_COMPAT_DIR ${CMAKE_SOURCE_DIR}/../../kernels/include/hip_compat)
   target_include_directories(_kernels BEFORE PRIVATE ${HIP_COMPAT_DIR})
-  # These two flashinfer headers are pulled in by a sibling-relative include, which the
+  # These flashinfer headers are pulled in by a sibling-relative include, which the
   # include path cannot shadow, so they are force-included ahead of it; each carries the
-  # upstream include guard, which turns the CUDA original into a no-op. Editing either one
+  # upstream include guard, which turns the CUDA original into a no-op. Editing one of them
   # does not invalidate an object file, so wipe the build directory after touching them.
   target_compile_options(_kernels PRIVATE $<$<COMPILE_LANGUAGE:HIP>:
     -include${HIP_COMPAT_DIR}/flashinfer/math.cuh
+    -include${HIP_COMPAT_DIR}/flashinfer/mma.cuh
     -include${HIP_COMPAT_DIR}/flashinfer/vec_dtypes.cuh>)
   target_include_directories(_kernels PRIVATE ${CMAKE_SOURCE_DIR}/csrc)
 else()

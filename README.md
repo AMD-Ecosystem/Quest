@@ -70,6 +70,8 @@ ln -sf $PWD/_kernels*.so ../../
 ```
 The target architecture comes from `CMAKE_HIP_ARCHITECTURES` when you pass it, otherwise from the `PYTORCH_ROCM_ARCH` environment variable, otherwise from the GPUs installed in the build machine.
 
+The model wrappers and `scripts/example_textgen.py` run on ROCm with this build. The accuracy evaluation scripts below also import `flash_attn`, which step 2 builds for CUDA; on an AMD GPU they need a ROCm build of flash-attention instead.
+
 ## Accuracy Evaluation
 Our evaluations are based on [LongChat-7B-v1.5-32K](https://huggingface.co/lmsys/longchat-7b-v1.5-32k?clone=true) and [Yarn-Llama2-7B-128K](https://huggingface.co/NousResearch/Yarn-Llama-2-7b-128k) models, which are capable of handling long-context text generations. We evaluate both passkey retrieval and LongBench benchmarks. We provide several scripts to reproduce our results in the paper:
 

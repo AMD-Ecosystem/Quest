@@ -14,9 +14,10 @@ if(NOT USE_HIP)
 else()
   # nvcc optimizes device code whatever the build type, but clang compiles HIP device code
   # at -O0 when none is given, which leaves the kernels many times slower. This has to come
-  # before project(): on Windows project() seeds the cache with Debug.
+  # before project(): on Windows project() seeds the cache with Debug. A build type given
+  # in the CMAKE_BUILD_TYPE environment variable is applied by project() and is left alone.
   get_property(_quest_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
-  if(NOT CMAKE_BUILD_TYPE AND NOT _quest_multi_config)
+  if(NOT CMAKE_BUILD_TYPE AND "$ENV{CMAKE_BUILD_TYPE}" STREQUAL "" AND NOT _quest_multi_config)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
   endif()
   # On Windows CMake needs the same clang driver for C++ and HIP, and only ROCm's GNU-style

@@ -45,9 +45,11 @@
 // HIP's warp-sync builtins take a 64-bit participation mask, wide enough to name every
 // lane of a 64-wide wavefront. The explicit width of 32 on the shuffle keeps the butterfly
 // inside a 32-lane group whatever the wavefront size, so the lane and warp indexing in
-// blockReduceSum below stays correct on AMD as well as on NVIDIA.
+// blockReduceSum below stays correct on AMD as well as on NVIDIA. The mask names only the
+// calling 32-lane group: when the block size is an odd multiple of 32, the last 64-wide
+// wavefront has just 32 lanes, and HIP's debug check rejects a mask naming the others.
 #if defined(USE_HIP)
-#define QUEST_FULL_WARP_MASK 0xffffffffffffffffULL
+#define QUEST_FULL_WARP_MASK (0xffffffffULL << (__lane_id() & ~31u))
 #else
 #define QUEST_FULL_WARP_MASK 0xffffffffU
 #endif

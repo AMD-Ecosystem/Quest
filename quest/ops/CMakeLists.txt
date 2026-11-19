@@ -28,7 +28,21 @@ else()
     elseif(NOT "$ENV{HIPCXX}" STREQUAL "")
       set(CMAKE_CXX_COMPILER "$ENV{HIPCXX}")
     else()
-      find_program(_quest_hipconfig hipconfig HINTS ENV HIP_PATH ENV ROCM_PATH PATH_SUFFIXES bin)
+      # A pip-installed ROCm SDK puts hipconfig in the Python environment's Scripts
+      # directory, which is on PATH only while that environment is activated.
+      set(_quest_hipconfig_hints)
+      if(Python_EXECUTABLE)
+        get_filename_component(_quest_python_dir "${Python_EXECUTABLE}" DIRECTORY)
+        list(APPEND _quest_hipconfig_hints "${_quest_python_dir}" "${_quest_python_dir}/Scripts")
+      endif()
+      foreach(_quest_env_root "$ENV{VIRTUAL_ENV}" "$ENV{CONDA_PREFIX}")
+        if(NOT _quest_env_root STREQUAL "")
+          file(TO_CMAKE_PATH "${_quest_env_root}/Scripts" _quest_env_scripts)
+          list(APPEND _quest_hipconfig_hints "${_quest_env_scripts}")
+        endif()
+      endforeach()
+      find_program(_quest_hipconfig hipconfig
+        HINTS ENV HIP_PATH ENV ROCM_PATH ${_quest_hipconfig_hints} PATH_SUFFIXES bin)
       if(_quest_hipconfig)
         execute_process(COMMAND "${_quest_hipconfig}" --hipclangpath
           OUTPUT_VARIABLE _quest_hip_clang_path OUTPUT_STRIP_TRAILING_WHITESPACE)
@@ -37,6 +51,9 @@ else()
           set(CMAKE_CXX_COMPILER "${_quest_hip_clang_path}/clang++.exe")
           set(CMAKE_HIP_COMPILER "${CMAKE_CXX_COMPILER}")
         endif()
+      endif()
+      if(NOT CMAKE_CXX_COMPILER)
+        set(_quest_hip_clang_not_found TRUE)
       endif()
     endif()
   endif()
@@ -50,7 +67,14 @@ set(CMAKE_CXX_STANDARD 17)
 project(_kernels LANGUAGES CXX)
 
 if(USE_HIP)
-  if(WIN32 AND CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+  if(WIN32 AND CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC" AND _quest_hip_clang_not_found)
+    message(FATAL_ERROR
+      "The HIP build on Windows needs ROCm's GNU-style clang++ as the C++ compiler, but "
+      "none was found (no hipconfig on PATH or in the Python environment), so CMake took "
+      "${CMAKE_CXX_COMPILER}. Activate the Python environment that has the ROCm SDK, pass "
+      "-DPython_EXECUTABLE=<its python.exe>, or pass "
+      "-DCMAKE_HIP_COMPILER=<ROCm>/lib/llvm/bin/clang++.exe, in a fresh build directory.")
+  elseif(WIN32 AND CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
     message(FATAL_ERROR
       "The HIP build on Windows needs ROCm's GNU-style clang++ as the C++ compiler, but "
       "CMake was given ${CMAKE_CXX_COMPILER} (MSVC-style command line). Unset the CXX "
@@ -85,6 +109,11 @@ if(USE_HIP)
   if(WIN32 AND NOT DEFINED ENV{PYTORCH_ROCM_ARCH})
     string(REPLACE ";" " " _quest_hip_archs "${QUEST_HIP_ARCHITECTURES}")
     set(ENV{PYTORCH_ROCM_ARCH} "${_quest_hip_archs}")
+  endif()
+  # find_package(Torch) looks for ROCm only in ROCM_PATH or through rocm-sdk on PATH, which
+  # a Python environment that is not activated does not provide.
+  if(WIN32 AND NOT DEFINED ENV{ROCM_PATH} AND CMAKE_HIP_COMPILER_ROCM_ROOT)
+    set(ENV{ROCM_PATH} "${CMAKE_HIP_COMPILER_ROCM_ROOT}")
   endif()
   set(CMAKE_HIP_STANDARD 20)
   set(CMAKE_CXX_STANDARD 20)

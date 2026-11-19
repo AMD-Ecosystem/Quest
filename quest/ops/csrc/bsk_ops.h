@@ -20,11 +20,10 @@
 
 #if !defined(USE_HIP)
 // The prefill kernels are built on mma.sync and ldmatrix, which have no HIP spelling and
-// need an AMD-native rewrite; top-k page filtering calls RAFT's radix select, which builds
-// for CUDA only. Both are left out of the ROCm build.
+// need an AMD-native rewrite, so they are left out of the ROCm build.
 #include "prefill/prefill.cuh"
-#include "topk/decode_select_k.cuh"
 #endif
+#include "topk/decode_select_k.cuh"
 
 void apply_rope_in_place(torch::Tensor q,
 						 torch::Tensor k,
@@ -37,14 +36,12 @@ void rms_norm_forward(torch::Tensor input,
 					  torch::Tensor output,
 					  float epsilon);
 
-#if !defined(USE_HIP)
 void topk_filtering(torch::Tensor estimated_value,
 					torch::Tensor estimated_indices,
 					torch::Tensor d_out,
 					torch::Tensor indices_out,
 					torch::Tensor buf,
 					unsigned int page_budget);
-#endif
 
 void estimate_attn_score(torch::Tensor q,
 						 torch::Tensor o,

@@ -67,13 +67,13 @@ find_library(TORCH_PYTHON_LIBRARY torch_python PATH "${TORCH_INSTALL_PREFIX}/lib
 add_subdirectory(${CMAKE_SOURCE_DIR}/../../kernels/3rdparty/pybind ${CMAKE_BINARY_DIR}/pybind11)
 
 if(USE_HIP)
-  # The prefill kernels and the RAFT-based top-k are left out of the ROCm build; see
-  # csrc/bsk_ops.h for what each one needs before it can be added.
+  # The prefill kernels are left out of the ROCm build; see csrc/bsk_ops.h.
   set(PYTORCH_SOURCES
     csrc/rms_norm.cu
     csrc/page.cu
     csrc/estimate.cu
     csrc/approx_attn.cu
+    csrc/topk.cu
     csrc/bsk_ops.cu
   )
   set_source_files_properties(${PYTORCH_SOURCES} PROPERTIES LANGUAGE HIP)

@@ -41,6 +41,11 @@ if(USE_HIP)
   list(REMOVE_DUPLICATES QUEST_HIP_ARCHITECTURES)
   set(CMAKE_HIP_STANDARD 20)
   set(CMAKE_CXX_STANDARD 20)
+  # nvcc optimizes device code whatever the build type, but clang compiles HIP device code
+  # at -O0 when none is given, which leaves the kernels many times slower.
+  if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+  endif()
 else()
   # CUDA build path (original)
   enable_language(CUDA)

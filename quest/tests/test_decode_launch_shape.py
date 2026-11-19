@@ -24,10 +24,7 @@ DECODE_SUITES = ["test_decode_attention.py", "test_approx_attention.py"]
 
 def _run_suites(shape, suites, extra_args=()):
     env = dict(os.environ)
-    if shape is None:
-        env.pop("QUEST_DECODE_LAUNCH_SHAPE", None)
-    else:
-        env["QUEST_DECODE_LAUNCH_SHAPE"] = shape
+    env["QUEST_DECODE_LAUNCH_SHAPE"] = shape
     cmd = [sys.executable, "-m", "pytest", "-q", *extra_args]
     cmd += [str(TESTS_DIR / name) for name in suites]
     return subprocess.run(cmd, cwd=REPO_ROOT, env=env, capture_output=True, text=True)

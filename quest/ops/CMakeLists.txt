@@ -11,6 +11,35 @@ if(NOT USE_HIP)
   if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
       set(CMAKE_CUDA_ARCHITECTURES native)
   endif()
+else()
+  # nvcc optimizes device code whatever the build type, but clang compiles HIP device code
+  # at -O0 when none is given, which leaves the kernels many times slower. This has to come
+  # before project(): on Windows project() seeds the cache with Debug.
+  get_property(_quest_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+  if(NOT CMAKE_BUILD_TYPE AND NOT _quest_multi_config)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+  endif()
+  # On Windows CMake needs the same clang driver for C++ and HIP, and only ROCm's GNU-style
+  # clang++ works for both; left alone it would take cl.exe for C++. Use the compiler
+  # CMake is going to pick for HIP unless C++ was chosen explicitly.
+  if(CMAKE_HOST_WIN32 AND NOT CMAKE_CXX_COMPILER AND "$ENV{CXX}" STREQUAL "")
+    if(CMAKE_HIP_COMPILER)
+      set(CMAKE_CXX_COMPILER "${CMAKE_HIP_COMPILER}")
+    elseif(NOT "$ENV{HIPCXX}" STREQUAL "")
+      set(CMAKE_CXX_COMPILER "$ENV{HIPCXX}")
+    else()
+      find_program(_quest_hipconfig hipconfig HINTS ENV HIP_PATH ENV ROCM_PATH PATH_SUFFIXES bin)
+      if(_quest_hipconfig)
+        execute_process(COMMAND "${_quest_hipconfig}" --hipclangpath
+          OUTPUT_VARIABLE _quest_hip_clang_path OUTPUT_STRIP_TRAILING_WHITESPACE)
+        file(TO_CMAKE_PATH "${_quest_hip_clang_path}" _quest_hip_clang_path)
+        if(EXISTS "${_quest_hip_clang_path}/clang++.exe")
+          set(CMAKE_CXX_COMPILER "${_quest_hip_clang_path}/clang++.exe")
+          set(CMAKE_HIP_COMPILER "${CMAKE_CXX_COMPILER}")
+        endif()
+      endif()
+    endif()
+  endif()
 endif()
 
 set(CMAKE_C_STANDARD 17)
@@ -21,6 +50,13 @@ set(CMAKE_CXX_STANDARD 17)
 project(_kernels LANGUAGES CXX)
 
 if(USE_HIP)
+  if(WIN32 AND CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+    message(FATAL_ERROR
+      "The HIP build on Windows needs ROCm's GNU-style clang++ as the C++ compiler, but "
+      "CMake was given ${CMAKE_CXX_COMPILER} (MSVC-style command line). Unset the CXX "
+      "environment variable or pass -DCMAKE_CXX_COMPILER=<ROCm>/lib/llvm/bin/clang++.exe, "
+      "in a fresh build directory.")
+  endif()
   # Same ordering constraint as CUDA above: enable_language(HIP) caches whatever
   # rocm_agent_enumerator reports for the machine doing the build unless the target is
   # already known, so let PYTORCH_ROCM_ARCH be read first. An explicit
@@ -33,19 +69,25 @@ if(USE_HIP)
     string(REPLACE " " ";" _quest_hip_archs "$ENV{PYTORCH_ROCM_ARCH}")
     set(CMAKE_HIP_ARCHITECTURES "${_quest_hip_archs}" CACHE STRING "HIP architectures" FORCE)
   endif()
+  # Windows has no rocm_agent_enumerator, so neither CMake nor find_package(Torch) can
+  # detect the installed GPUs there.
+  if(WIN32 AND NOT CMAKE_HIP_ARCHITECTURES)
+    message(FATAL_ERROR "Name the GPU architecture on Windows, for example "
+      "-DCMAKE_HIP_ARCHITECTURES=gfx1100 or the PYTORCH_ROCM_ARCH environment variable.")
+  endif()
   enable_language(HIP)
   # find_package(Torch) below overwrites CMAKE_HIP_ARCHITECTURES with the architecture
   # list PyTorch itself was built for, using a normal variable that hides the cache entry.
   # Keep the target resolved here and give that to the module instead.
   set(QUEST_HIP_ARCHITECTURES ${CMAKE_HIP_ARCHITECTURES})
   list(REMOVE_DUPLICATES QUEST_HIP_ARCHITECTURES)
+  # find_package(Torch) takes the architecture only from the environment.
+  if(WIN32 AND NOT DEFINED ENV{PYTORCH_ROCM_ARCH})
+    string(REPLACE ";" " " _quest_hip_archs "${QUEST_HIP_ARCHITECTURES}")
+    set(ENV{PYTORCH_ROCM_ARCH} "${_quest_hip_archs}")
+  endif()
   set(CMAKE_HIP_STANDARD 20)
   set(CMAKE_CXX_STANDARD 20)
-  # nvcc optimizes device code whatever the build type, but clang compiles HIP device code
-  # at -O0 when none is given, which leaves the kernels many times slower.
-  if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
-    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
-  endif()
 else()
   # CUDA build path (original)
   enable_language(CUDA)

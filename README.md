@@ -70,6 +70,16 @@ ln -sf $PWD/_kernels*.so ../../
 ```
 The target architecture comes from `CMAKE_HIP_ARCHITECTURES` when you pass it, otherwise from the `PYTORCH_ROCM_ARCH` environment variable, otherwise from the GPUs installed in the build machine.
 
+On Windows, build from PowerShell with the Visual Studio x64 build tools environment loaded (for example the "x64 Native Tools" prompt) and the Python environment that has the ROCm build of PyTorch activated. CMake takes the Python interpreter from the active virtual or conda environment; outside one, add `-DPython_EXECUTABLE=<path to python.exe>`. Always name the architecture, since it is not detected from the installed GPUs on Windows. C++ is compiled with ROCm's `clang++`, the same compiler as the HIP code, so leave `CXX` unset (or set it to that `clang++`); an MSVC-style compiler such as `cl` or `clang-cl` stops the configure with a message.
+```
+cd quest\ops
+mkdir build; cd build
+cmake -GNinja -DUSE_HIP=ON -DCMAKE_HIP_ARCHITECTURES=gfx1151 `
+  "-DCMAKE_PREFIX_PATH=$(python -c 'import torch;print(torch.utils.cmake_prefix_path)')" ..
+ninja
+copy _kernels*.pyd ..\..\
+```
+
 The model wrappers and `scripts/example_textgen.py` run on ROCm with this build. The accuracy evaluation scripts below also import `flash_attn`, which step 2 builds for CUDA; on an AMD GPU they need a ROCm build of flash-attention instead.
 
 ## Accuracy Evaluation

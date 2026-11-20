@@ -40,11 +40,12 @@
 
 #if !defined(QUEST_PREFILL_MMA) && defined(__HIP_DEVICE_COMPILE__)
 #if defined(__gfx90a__) || defined(__gfx940__) || defined(__gfx941__) || defined(__gfx942__) || \
-    defined(__gfx950__)
+    defined(__gfx950__) || defined(__gfx9_4_generic__)
 #define QUEST_PREFILL_MMA 1
 #elif defined(__GFX11__)
 #define QUEST_PREFILL_MMA 11
-#elif defined(__GFX12__)
+#elif defined(__gfx1200__) || defined(__gfx1201__) || defined(__gfx12_generic__)
+// Not __GFX12__: gfx1250 has a different set of WMMA instructions.
 #define QUEST_PREFILL_MMA 12
 #endif
 #endif
